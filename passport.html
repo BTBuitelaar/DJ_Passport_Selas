@@ -78,6 +78,21 @@ background: rgba(255, 255, 255, 0.55);
 }
 }
 
+.glass-chip.safari-glass {
+overflow: hidden;
+background: rgba(255, 255, 255, 0.14);
+}
+
+.safari-glass-canvas {
+position: absolute;
+inset: 0;
+width: 100%;
+height: 100%;
+filter: saturate(1.6) contrast(1.05);
+z-index: 0;
+pointer-events: none;
+}
+
 .passport-logo-overlay {
 width: 272px;
 height: auto;
@@ -343,6 +358,170 @@ resizeTimer = setTimeout(buildMap, 120);
 });
 
 buildMap();
+})();
+
+(function() {
+var ua = navigator.userAgent;
+var isSafari = /^((?!chrome|android|crios|fxios|edg|opios).)*safari/i.test(ua);
+if (!isSafari) return;
+
+var chip = document.getElementById('glassChip');
+var video = document.querySelector('.header-video-wrapper video');
+if (!chip || !video) return;
+
+chip.classList.add('safari-glass');
+
+var canvas = document.createElement('canvas');
+canvas.className = 'safari-glass-canvas';
+chip.insertBefore(canvas, chip.firstChild);
+var ctx = canvas.getContext('2d');
+
+var off = document.createElement('canvas');
+var offCtx = off.getContext('2d');
+
+var fieldW = 0, fieldH = 0, dxMap = null, dyMap = null;
+
+function roundRectPath(c, x, y, w, h, r) {
+r = Math.max(0, Math.min(r, w / 2, h / 2));
+c.beginPath();
+c.moveTo(x + r, y);
+c.arcTo(x + w, y, x + w, y + h, r);
+c.arcTo(x + w, y + h, x, y + h, r);
+c.arcTo(x, y + h, x, y, r);
+c.arcTo(x, y, x + w, y, r);
+c.closePath();
+}
+
+function computeField(w, h, radius) {
+var edge = Math.max(6, radius * 0.45);
+var mask = document.createElement('canvas');
+mask.width = w; mask.height = h;
+var mctx = mask.getContext('2d');
+mctx.fillStyle = '#000';
+mctx.fillRect(0, 0, w, h);
+mctx.fillStyle = '#fff';
+roundRectPath(mctx, edge, edge, w - edge * 2, h - edge * 2, Math.max(1, radius - edge));
+mctx.fill();
+
+var blurred = document.createElement('canvas');
+blurred.width = w; blurred.height = h;
+var bctx = blurred.getContext('2d');
+bctx.filter = 'blur(' + Math.max(1.5, edge * 0.32) + 'px)';
+bctx.drawImage(mask, 0, 0);
+
+var data;
+try { data = bctx.getImageData(0, 0, w, h).data; } catch (e) { return null; }
+
+function lum(x, y) {
+x = x < 0 ? 0 : (x >= w ? w - 1 : x);
+y = y < 0 ? 0 : (y >= h ? h - 1 : y);
+return data[(y * w + x) * 4];
+}
+
+var dx = new Float32Array(w * h);
+var dy = new Float32Array(w * h);
+for (var y = 0; y < h; y++) {
+for (var x = 0; x < w; x++) {
+var i = y * w + x;
+dx[i] = (lum(x + 1, y) - lum(x - 1, y)) / 2;
+dy[i] = (lum(x, y + 1) - lum(x, y - 1)) / 2;
+}
+}
+return { dx: dx, dy: dy };
+}
+
+function setup() {
+var rect = chip.getBoundingClientRect();
+if (rect.width < 2 || rect.height < 2) return;
+var w = Math.max(2, Math.round(rect.width));
+var h = Math.max(2, Math.round(rect.height));
+var radius = parseFloat(getComputedStyle(chip).borderRadius) || 20;
+
+canvas.width = w; canvas.height = h;
+canvas.style.width = w + 'px';
+canvas.style.height = h + 'px';
+off.width = w; off.height = h;
+
+var field = computeField(w, h, radius);
+if (!field) return;
+dxMap = field.dx; dyMap = field.dy;
+fieldW = w; fieldH = h;
+}
+
+var scaleR = 0.42, scaleG = 0.24, scaleB = 0.05;
+
+function clampCoord(v, max) { return v < 0 ? 0 : (v >= max ? max - 1 : v); }
+
+function render() {
+requestAnimationFrame(render);
+if (!dxMap || video.readyState < 2) return;
+
+var chipRect = chip.getBoundingClientRect();
+var videoRect = video.getBoundingClientRect();
+var nw = video.videoWidth, nh = video.videoHeight;
+if (!nw || !nh || videoRect.width < 2 || videoRect.height < 2) return;
+
+var scale = Math.max(videoRect.width / nw, videoRect.height / nh);
+var dispW = nw * scale, dispH = nh * scale;
+var offX = (videoRect.width - dispW) / 2;
+var offY = (videoRect.height - dispH) / 2;
+
+var px = (chipRect.left - videoRect.left);
+var py = (chipRect.top - videoRect.top);
+
+var srcX = (px - offX) / scale;
+var srcY = (py - offY) / scale;
+var srcW = chipRect.width / scale;
+var srcH = chipRect.height / scale;
+
+var w = fieldW, h = fieldH;
+if (w < 2 || h < 2) return;
+
+offCtx.save();
+offCtx.filter = 'blur(1px)';
+try {
+offCtx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, w, h);
+} catch (e) { offCtx.restore(); return; }
+offCtx.restore();
+
+var srcData;
+try { srcData = offCtx.getImageData(0, 0, w, h).data; } catch (e) { return; }
+
+var outImg = ctx.createImageData(w, h);
+var od = outImg.data;
+
+for (var y = 0; y < h; y++) {
+for (var x = 0; x < w; x++) {
+var i = y * w + x;
+var gx = dxMap[i], gy = dyMap[i];
+
+var rx = clampCoord(Math.round(x + gx * scaleR), w);
+var ry = clampCoord(Math.round(y + gy * scaleR), h);
+var gxi = clampCoord(Math.round(x + gx * scaleG), w);
+var gyi = clampCoord(Math.round(y + gy * scaleG), h);
+var bxi = clampCoord(Math.round(x + gx * scaleB), w);
+var byi = clampCoord(Math.round(y + gy * scaleB), h);
+
+var ridx = (ry * w + rx) * 4;
+var gidx = (gyi * w + gxi) * 4;
+var bidx = (byi * w + bxi) * 4;
+
+var oidx = i * 4;
+od[oidx] = srcData[ridx];
+od[oidx + 1] = srcData[gidx + 1];
+od[oidx + 2] = srcData[bidx + 2];
+od[oidx + 3] = 255;
+}
+}
+ctx.putImageData(outImg, 0, 0);
+}
+
+setup();
+window.addEventListener('resize', function() {
+clearTimeout(window.__safariGlassResizeTimer);
+window.__safariGlassResizeTimer = setTimeout(setup, 150);
+});
+requestAnimationFrame(render);
 })();
 
 (function() {
