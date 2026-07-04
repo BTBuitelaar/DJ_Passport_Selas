@@ -210,9 +210,9 @@ letter-spacing: 1px;
 <filter id="liquidGlassFilter" x="-55%" y="-55%" width="210%" height="210%" primitiveUnits="objectBoundingBox" color-interpolation-filters="sRGB">
 <feImage id="glassDisplacementMap" x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="map"/>
 <feGaussianBlur in="SourceGraphic" stdDeviation="0.007" result="blurred"/>
-<feDisplacementMap in="blurred" in2="map" scale="0.02" xChannelSelector="R" yChannelSelector="G" result="dispG"/>
-<feDisplacementMap in="blurred" in2="map" scale="0.34" xChannelSelector="R" yChannelSelector="G" result="dispR"/>
-<feDisplacementMap in="blurred" in2="map" scale="-0.34" xChannelSelector="R" yChannelSelector="G" result="dispB"/>
+<feDisplacementMap in="blurred" in2="map" scale="0.40" xChannelSelector="R" yChannelSelector="G" result="dispG"/>
+<feDisplacementMap in="blurred" in2="map" scale="0.71" xChannelSelector="R" yChannelSelector="G" result="dispR"/>
+<feDisplacementMap in="blurred" in2="map" scale="0.09" xChannelSelector="R" yChannelSelector="G" result="dispB"/>
 <feColorMatrix in="dispR" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="rOnly"/>
 <feColorMatrix in="dispG" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="gOnly"/>
 <feColorMatrix in="dispB" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="bOnly"/>
